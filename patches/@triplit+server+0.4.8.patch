@@ -1,0 +1,84 @@
+diff --git a/node_modules/@triplit/server/dist/server.d.ts b/node_modules/@triplit/server/dist/server.d.ts
+index 0a9677d..a4aafb2 100644
+--- a/node_modules/@triplit/server/dist/server.d.ts
++++ b/node_modules/@triplit/server/dist/server.d.ts
+@@ -1,5 +1,5 @@
+-import { DBConfig, Storage } from '@triplit/db';
+-import { StoreKeys } from './storage.js';
++import type { DB, DBConfig, Storage } from '@triplit/db';
++import type { StoreKeys } from './storage.js';
+ export type ServerOptions = {
+     storage?: StoreKeys | Storage | (() => Storage);
+     dbOptions?: DBConfig;
+@@ -11,5 +11,8 @@ export type ServerOptions = {
+     };
+ };
+ export declare function createServer(options?: ServerOptions): (port: number, onOpen?: (() => void) | undefined) => {
++    server:  Server<typeof IncomingMessage, typeof ServerResponse>;
++    app: Express;
++    db: DB,
+     close: (onClose?: () => void) => void;
+ };
+diff --git a/node_modules/@triplit/server/dist/server.js b/node_modules/@triplit/server/dist/server.js
+index ae278ba..eba9c08 100644
+--- a/node_modules/@triplit/server/dist/server.js
++++ b/node_modules/@triplit/server/dist/server.js
+@@ -106,10 +106,10 @@ export function createServer(options) {
+     app.use(express.json());
+     app.use((req, res, next) => {
+         const start = new Date();
+-        let send = res.send;
++        const send = res.send;
+         res.send = (c) => {
+             const end = new Date();
+-            let body = c;
++            const body = c;
+             const resWithBody = {
+                 ...res,
+                 body,
+@@ -157,7 +157,7 @@ export function createServer(options) {
+     function sendErrorMessage(socket, originalMessage, // message is undefined if we cannot parse it
+     error, metadata) {
+         const messageType = originalMessage?.type;
+-        let payload = {
++        const payload = {
+             messageType,
+             error: error.toJSON(),
+             metadata,
+@@ -248,7 +248,7 @@ export function createServer(options) {
+         }
+         const connection = triplitServer.openConnection(token, {
+             clientId: client,
+-            clientSchemaHash: schema ? parseInt(schema) : undefined,
++            clientSchemaHash: schema ? Number.parseInt(schema) : undefined,
+             syncSchema: syncSchema === 'true',
+         });
+         res.setHeader('Cache-Control', 'no-cache');
+@@ -275,7 +275,7 @@ export function createServer(options) {
+         });
+         return;
+     });
+-    app.use('/', authenticated);
++    app.use('/triplit', authenticated);
+     app.on('error', (err) => {
+         console.error(err);
+         captureException(err);
+@@ -312,7 +312,7 @@ export function createServer(options) {
+                         const parsedUrl = url.parse(request.url, true);
+                         const clientId = parsedUrl.query.client;
+                         const clientHash = parsedUrl.query.schema
+-                            ? parseInt(parsedUrl.query.schema)
++                            ? Number.parseInt(parsedUrl.query.schema)
+                             : undefined;
+                         const syncSchema = parsedUrl.query['sync-schema'] === 'true';
+                         const server = getServer(process.env.PROJECT_ID, options?.upstream);
+@@ -345,6 +345,9 @@ export function createServer(options) {
+             });
+         });
+         return {
++            server,
++            app,
++            db: triplitServer.db,
+             close: (onClose) => {
+                 wss.clients.forEach((socket) => socket.terminate());
+                 server.close();

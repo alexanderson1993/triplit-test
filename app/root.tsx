@@ -6,6 +6,15 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import "./tailwind.css";
+import type { DB } from "@triplit/db";
+import "@remix-run/server-runtime";
+import type { Models } from "~/triplit/client";
+
+declare module "@remix-run/server-runtime" {
+  export interface AppLoadContext {
+    db: DB<Models>;
+  }
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (

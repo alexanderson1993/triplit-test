@@ -1,4 +1,17 @@
-import type { MetaFunction } from "@remix-run/node";
+import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import {
+  type ClientLoaderFunctionArgs,
+  Form,
+  useLoaderData,
+} from "@remix-run/react";
+import type {
+  ClientQuery,
+  ClientQueryBuilder,
+  CollectionNameFromModels,
+} from "@triplit/client";
+import { useQuery } from "@triplit/react";
+import Todo from "~/components/todo";
+import { type Models, triplit } from "~/triplit/client";
 
 export const meta: MetaFunction = () => {
   return [
@@ -7,42 +20,68 @@ export const meta: MetaFunction = () => {
   ];
 };
 
+const query = triplit.query("todos").order("created_at", "DESC");
+
+export async function loader({ context }: LoaderFunctionArgs) {
+  const results = await context.db.fetch({
+    collectionName: "todos",
+    order: [["created_at", "DESC"]],
+  });
+
+  return {
+    results,
+  };
+}
+
+export async function clientAction({ request }: ClientLoaderFunctionArgs) {
+  const form = await request.formData();
+  const text = form.get("text");
+  if (typeof text !== "string" || !text)
+    return new Response("Bad Request", { status: 400 });
+
+  await triplit.insert("todos", { text });
+
+  return null;
+}
+
+function useSyncedData<
+  CN extends CollectionNameFromModels<Models>,
+  Q extends ClientQuery<Models, CN>
+>(query: ClientQueryBuilder<Models, CN, Q>) {
+  const loaderResults = useLoaderData<typeof loader>().results;
+  const { results, error } = useQuery(triplit, query);
+
+  console.log(loaderResults, results);
+  return { results: results || loaderResults, error };
+}
+
 export default function Index() {
+  const { results: todos } = useSyncedData(query);
+
   return (
-    <div className="font-sans p-4">
-      <h1 className="text-3xl">Welcome to Remix</h1>
-      <ul className="list-disc mt-4 pl-6 space-y-2">
-        <li>
-          <a
-            className="text-blue-700 underline visited:text-purple-900"
-            target="_blank"
-            href="https://remix.run/start/quickstart"
-            rel="noreferrer"
-          >
-            5m Quick Start
-          </a>
-        </li>
-        <li>
-          <a
-            className="text-blue-700 underline visited:text-purple-900"
-            target="_blank"
-            href="https://remix.run/start/tutorial"
-            rel="noreferrer"
-          >
-            30m Tutorial
-          </a>
-        </li>
-        <li>
-          <a
-            className="text-blue-700 underline visited:text-purple-900"
-            target="_blank"
-            href="https://remix.run/docs"
-            rel="noreferrer"
-          >
-            Remix Docs
-          </a>
-        </li>
-      </ul>
-    </div>
+    <>
+      <Form method="POST">
+        <input
+          type="text"
+          placeholder="What needs to be done?"
+          className="todo-input"
+          name="text"
+        />
+        <button className="btn" type="submit">
+          Add Todo
+        </button>
+      </Form>
+      {todos && (
+        <div>
+          {Array.from(todos)
+            .sort(([, todo1], [, todo2]) =>
+              todo1.created_at > todo2.created_at ? -1 : 1
+            )
+            .map(([id, todo]) => (
+              <Todo key={id} todo={todo} />
+            ))}
+        </div>
+      )}
+    </>
   );
 }
